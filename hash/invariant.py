@@ -1,29 +1,29 @@
-import telnetlib
+import socket
 import json
 
 HOST = "socket.cryptohack.org"
 PORT = 13393
 
-tn = telnetlib.Telnet(HOST, PORT)
+def read_line(sock):
+    buffer = b""
+    while not buffer.endswith(b"\n"):
+        buffer += sock.recv(1)
+    return buffer.decode()
 
-def readline():
-    return tn.read_until(b"\n")
+def send_json(sock, payload):
+    serialized_data = json.dumps(payload).encode()
+    sock.sendall(serialized_data + b"\n")
 
-def json_recv():
-    line = readline()
-    return json.loads(line.decode())
+def receive_json(sock):
+    response = read_line(sock)
+    return json.loads(response)
 
-def json_send(hsh):
-    request = json.dumps(hsh).encode()
-    tn.write(request)
-
-
-print(readline())
-
-to_send = {
+with socket.create_connection((HOST, PORT)) as conn:
+    print(read_line(conn))
+    payload = {
         "data": "76777776666666666666667767767676",
         "option": "hash"
     }
-json_send(to_send)
-received = json_recv()
-print(received)
+    send_json(conn, payload)
+    response = receive_json(conn)
+    print(response)

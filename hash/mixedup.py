@@ -1,58 +1,32 @@
-
-from Crypto.Util.number import bytes_to_long, long_to_bytes
-import telnetlib
-import json
-from sage.all import *
+from Crypto.Util.number import long_to_bytes
 from hashlib import sha256
-import os
 
-def check(val, flag_len):
-    for i in range(256):
-        if (val) == (sha256(bytes([i]*flag_len)).hexdigest()):
-            return True
-    return False
-        
+from pwn import *
+import json
 
-HOST = "socket.cryptohack.org"
-PORT = 13402
+# Just so we know the length of the flag.
+FLAG = b"crypto{???????????????????????????????}"
 
-def readline():
-    return tn.read_until(b"\n")
+r = remote("socket.cryptohack.org", 13402, level="error")
+r.recvline()
 
-def json_recv():
-    line = readline().decode()
-    st = line[line.find('{'):]
-    return json.loads(st)
+# precompute sha256 table
+sha256_table = {}
+for i in range(0, 256):
+    b = long_to_bytes(i, 1) * len(FLAG)
+    sha256_table[sha256(b).hexdigest()] = True
 
-def json_send(hsh):
-    request = json.dumps(hsh).encode()
-    tn.write(request)
-
-tn = telnetlib.Telnet(HOST, PORT)
-print(readline())
-flag_length = 0
-for i in range(1,50):
-    data = [0]*i
-    to_send = json.loads(json.dumps({"option" : "mix", "data" : bytes(data).hex()}))
-    json_send(to_send)
-
-    val = json_recv()["mixed"]
-    if check(val, i):
-        flag_length = i
-        print("gg flag_length ==", i)
-
-data = [0]*flag_length
-flag = 0
-for i in range(8*flag_length):
-    data[flag_length - (i//8) - 1] = 1<<(i%8)
-    to_send = json.loads(json.dumps({"option" : "mix", "data" : bytes(data).hex()}))
-    json_send(to_send)
-
-    val = json_recv()["mixed"]
-    if not check(val, flag_length):
-        flag += (1<<i)
-    data[flag_length - (i//8) - 1] = 0
-print(long_to_bytes(flag))
-b'Oh no, how are you going to unmix this?\n'
-gg flag_length == 39
-b'crypto{y0u_c4n7_m1x_3v3ry7h1n6_1n_l1f3}'
+bits = []
+flag = ""
+logger = log.progress("🏴")
+for idx in range(0, len(FLAG)*8):
+    r.sendline(json.dumps(
+        {"option": "mix", "data": long_to_bytes(1 << idx, len(FLAG)).hex()}))
+    resp = (json.loads(r.recvline().decode()))["mixed"]
+    bit = 0 if resp in sha256_table else 1
+    bits.append(bit)
+    if len(bits) == 8:
+        flag = long_to_bytes(
+            int("".join(map(str, bits))[::-1], 2)).decode() + flag
+        logger.status(flag)
+        bits = []

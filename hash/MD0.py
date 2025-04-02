@@ -4,46 +4,46 @@ from Crypto.Util.Padding import pad
 import socket
 import json
 
-def bxor(a, b):
-    return bytes(x ^ y for x, y in zip(a, b))
+def xor_bytes(byte_seq1, byte_seq2):
+    return bytes(a ^ b for a, b in zip(byte_seq1, byte_seq2))
 
-def hash(data, sig):
-    data = pad(data, 16)
-    out = sig
-    for i in range(0, len(data), 16):
-        blk = data[i:i+16]
-        out = bxor(AES.new(blk, AES.MODE_ECB).encrypt(out), out)
-    return out
+def custom_hash(data, signature):
+    padded_data = pad(data, 16)
+    result = signature
+    for i in range(0, len(padded_data), 16):
+        block = padded_data[i:i+16]
+        result = xor_bytes(AES.new(block, AES.MODE_ECB).encrypt(result), result)
+    return result
 
-HOST = "socket.cryptohack.org"
-PORT = 13388
+SERVER_HOST = "socket.cryptohack.org"
+SERVER_PORT = 13388
 
-def read_line(sock):
-    buffer = b""
-    while not buffer.endswith(b"\n"):
-        buffer += sock.recv(1)
-    return buffer.decode()
+def read_from_socket(sock):
+    data = b""
+    while not data.endswith(b"\n"):
+        data += sock.recv(1)
+    return data.decode()
 
-def receive_json(sock):
-    line = read_line(sock)
-    return json.loads(line[line.find('{'):])
+def parse_json_response(sock):
+    response = read_from_socket(sock)
+    return json.loads(response[response.find('{'):])
 
-def send_json(sock, payload):
-    request = json.dumps(payload).encode()
-    sock.sendall(request + b"\n")
+def send_payload(sock, payload):
+    serialized_data = json.dumps(payload).encode()
+    sock.sendall(serialized_data + b"\n")
 
-with socket.create_connection((HOST, PORT)) as conn:
-    print(read_line(conn))
+with socket.create_connection((SERVER_HOST, SERVER_PORT)) as connection:
+    print(read_from_socket(connection))
 
-    to_send = {"option": "sign", "message": bytes([0] * 15).hex()}
-    send_json(conn, to_send)
-    sig = receive_json(conn)["signature"]
-    sig = hash(b'admin=True', bytes.fromhex(sig))
+    payload = {"option": "sign", "message": bytes([0] * 15).hex()}
+    send_payload(connection, payload)
+    signature = parse_json_response(connection)["signature"]
+    forged_signature = custom_hash(b'admin=True', bytes.fromhex(signature))
 
-    to_send = {
+    payload = {
         "option": "get_flag",
         "message": (bytes([0] * 15) + bytes([1]) + b'admin=True').hex(),
-        "signature": sig.hex()
+        "signature": forged_signature.hex()
     }
-    send_json(conn, to_send)
-    print(receive_json(conn))
+    send_payload(connection, payload)
+    print(parse_json_response(connection))

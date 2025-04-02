@@ -18,4 +18,4 @@ v = (vkb * pow(k_B, -1, n)) % n
 key = sha256(long_to_bytes(v)).digest()
 cipher = AES.new(key, AES.MODE_ECB)
 pt = cipher.decrypt(bytes.fromhex(c))
-print(unpad(pt, 16)) # crypto{1nv3rt1bl3_k3y_3xch4ng3_pr0t0c0l}
+print(unpad(pt, 16)) 

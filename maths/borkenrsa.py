@@ -1,5 +1,5 @@
-from sage.all import *
-from Crypto.Util.number import inverse, long_to_bytes
+from Crypto.Util.number import inverse, long_to_bytes, GCD
+import random
 
 n = 27772857409875257529415990911214211975844307184430241451899407838750503024323367895540981606586709985980003435082116995888017731426634845808624796292507989171497629109450825818587383112280639037484593490692935998202437639626747133650990603333094513531505209954273004473567193235535061942991750932725808679249964667090723480397916715320876867803719301313440005075056481203859010490836599717523664197112053206745235908610484907715210436413015546671034478367679465233737115549451849810421017181842615880836253875862101545582922437858358265964489786463923280312860843031914516061327752183283528015684588796400861331354873
 e = 16
@@ -8,53 +8,26 @@ ct = 113031747618944311467356975694891347472349751441621721624016745672730348313
 def legendre(a, p):
     return pow(a, (p - 1) // 2, p)
 
-# tonolli shanks
-def step3(b,p,r,x):
-       # Step 3: Find exponent
-       if GF(p)(b) == GF(p)(1):
-               return b,r,x,0
-       m = 0
-       while GF(p)(b**(2**m)) != 1:
-               m = m + 1
-       if m == r:
-               return b,r,0,0
-       return b,r,x,m
-
-def s_root(a,p):
-       # Step 0: Determine q:
-       q = 0
-       e = 0
-       while q % 2 != 1:
-               e = e+1
-               q = (p-1) // 2**e
-       # Step 1: Find generator
-       n = ZZ.random_element()
-       while kronecker(n,p) != -1:
-               n = ZZ.random_element()
-       n = GF(p)(n)
-       z = GF(p)(n**q)
-       # Step 2: Initialize
-       y = z
-       r = e
-       a = GF(p)(a)
-       x = GF(p)(a**((q-1)//2))
-       b = GF(p)(a*(x**2))
-       x = GF(p)(a*x)
-       # Step 3:
-       b,r,x,m = step3(b,p,r,x)
-       # Step 4: Reduce exponent
-       while ZZ(m) != ZZ(0):
-               t = GF(p)(y**(2**(r-m-1)))
-               y = GF(p)(t**2)
-               r = GF(p)(m)
-               x = GF(p)(x*t)
-               b = GF(p)(b*y)
-               b,r,x,m = step3(b,p,r,x)
-       return x
+def tonelli_shanks(a, p):
+    if legendre(a, p) != 1:
+        return None
+    if p % 4 == 3:
+        return pow(a, (p + 1) // 4, p)
+    s, q = 0, p - 1
+    while q % 2 == 0:
+        s += 1
+        q //= 2
+    z = next(x for x in range(2, p) if legendre(x, p) == p - 1)
+    m, c, t, r = s, pow(z, q, p), pow(a, q, p), pow(a, (q + 1) // 2, p)
+    while t != 1:
+        i = next(i for i in range(1, m) if pow(t, 2**i, p) == 1)
+        b = pow(c, 2**(m - i - 1), p)
+        m, c, t, r = i, pow(b, 2, p), t * pow(b, 2, p) % p, r * b % p
+    return r
 
 phi = n - 1
-while gcd(phi, e)!=1:
-      phi = phi//gcd(phi, e)
+while GCD(phi, e) != 1:
+    phi //= GCD(phi, e)
 d = inverse(e, phi)
 pt8 = pow(ct, d, n)
 assert pow(pt8, e, n) == ct
@@ -65,10 +38,9 @@ def print_solutions(number, power):
         if b"crypto" in plaintext:
             print(plaintext)
     else:
-        a = GF(n)(number)
-        r1 = s_root(a, n)
-        print_solutions(r1, power // 2)
-        r2 = n - r1
-        print_solutions(r2, power // 2)
+        r1 = tonelli_shanks(number, n)
+        if r1 is not None:
+            print_solutions(r1, power // 2)
+            print_solutions(n - r1, power // 2)
 
 print_solutions(pt8, 8)
